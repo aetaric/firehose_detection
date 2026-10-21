@@ -1,0 +1,4 @@
+/firehose-detection
+*.cursor
+.env
+rules.yaml

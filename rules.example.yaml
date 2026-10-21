@@ -1,0 +1,139 @@
+# Detection rules. Copy to rules.yaml and edit; send SIGHUP to reload without
+# restarting (a broken file is rejected and the previous rules stay active).
+#
+# A rule fires if ANY of its phrases or patterns match.
+#
+#   name:          required, unique. Shown in Discord and sent in reports.
+#   phrases:       literal substrings, case-insensitive ("Free ETH" == "free eth").
+#   patterns:      Go RE2 regexes (https://github.com/google/re2/wiki/Syntax).
+#                  Case-SENSITIVE unless you start them with (?i).
+#                  Use single quotes so YAML leaves backslashes alone.
+#   report_reason: what the Discord "Report to Bluesky" button files it as.
+#                  Default spam. Prefer the specific reasons; they route to
+#                  the right Bluesky moderation queue.
+#   collections:   optional list of record types the rule runs on:
+#                  app.bsky.feed.post, app.bsky.actor.profile. Default: all.
+#                  Use it when a pattern means something different in a bio
+#                  than in a post.
+#   auto_report:   true files the Bluesky report immediately, with no human
+#                  in the loop, every time the rule fires (default false).
+#                  Reserve it for rules with no false positives. Needs
+#                  BSKY_HANDLE/BSKY_APP_PASSWORD, or the process refuses to
+#                  start (and a SIGHUP reload is rejected). It works without
+#                  Discord. The report says it was filed automatically and
+#                  names every rule that fired. Edits to a post and crash
+#                  recovery file a second report; there is no dedupe.
+#
+#     general:      spam, violation, misleading, sexual, rude, other
+#     child safety: child-safety-csam, child-safety-groom, child-safety-privacy,
+#                   child-safety-harassment, child-safety-other
+#     sexual:       sexual-abuse-content, sexual-ncii, sexual-deepfake,
+#                   sexual-animal, sexual-unlabeled, sexual-other
+#     violence:     violence-threats, violence-graphic-content,
+#                   violence-glorification, violence-extremist-content,
+#                   violence-trafficking, violence-animal, violence-other
+#     harassment:   harassment-targeted, harassment-hate-speech,
+#                   harassment-doxxing, harassment-troll, harassment-other
+#     misleading:   misleading-scam, misleading-spam, misleading-impersonation,
+#                   misleading-bot, misleading-elections, misleading-other
+#     self-harm:    self-harm-content, self-harm-ed, self-harm-stunts,
+#                   self-harm-substances, self-harm-other
+#     site rules:   rule-prohibited-sales, rule-ban-evasion,
+#                   rule-site-security, rule-other
+#
+# Unless a rule sets collections:, it runs against both posts and profiles:
+#   posts:    body, image/video alt text, link card title/description/URL, links
+#   profiles: display name, bio, pronouns, website
+#
+# How matches show up in Discord (when DISCORD_TOKEN is set):
+#
+#   - One message per matching post or profile, however many rules fired.
+#     Title is "Post matched" or "Profile matched", plus "(edited)" for edits.
+#   - The "Rules" field lists every rule that fired, in this file's order:
+#         **crypto-giveaway** (misleading-scam): `free eth` `send me eth`
+#     Each matched term is cut to 200 characters, and the field to Discord's
+#     1024 limit (ending in "…"). Keep rule names short and readable.
+#   - The post/profile text is shown in a code block. Images, video, avatars
+#     and banners are never shown, only counted ("Media: 2 images (not
+#     shown)"), and links in the text can't be clicked.
+#   - The "Report to Bluesky" button files the report with the report_reason
+#     of the FIRST rule that fired. ORDER MATTERS: put the rules whose reason
+#     you trust most at the top. The button label shows the reason, e.g.
+#     "Report to Bluesky (misleading-scam)".
+#   - If any rule that fired has auto_report, the message arrives already
+#     green with a Status of "Auto-reported (<reason>) by rule <name>", using
+#     the first auto_report rule's reason. Its Report button is disabled so
+#     nobody files a duplicate; Dismiss still works for tidying the channel.
+#   - Report marks the message as reported and disables its buttons.
+#     Dismiss deletes the message outright; the only record left is the
+#     "dismissed" log line (who, when, and which post/profile).
+#   - Report/Dismiss buttons only appear when BSKY_HANDLE and
+#     BSKY_APP_PASSWORD are set. Messages already posted keep the reason
+#     they were posted with, even after you edit this file and reload.
+#   - Every match is a Discord message, and Discord allows roughly one per
+#     second per channel. Matches beyond that are dropped from Discord
+#     (stdout still gets them, and the drop count is logged), so broad rules
+#     can crowd out the ones you care about.
+
+rules:
+  # --- Scams -----------------------------------------------------------------
+
+  - name: crypto-giveaway
+    report_reason: misleading-scam
+    phrases:
+      - "send me eth"
+      - "double your btc"
+      - "airdrop is live"
+      - "claim your free tokens"
+    patterns:
+      - '(?i)\bfree\s+(nft|crypto|eth|btc|sol)\b'
+      - '(?i)\bconnect\s+(your\s+)?wallet\b'
+
+  # Exact scam phrasing with no legitimate use, so it's reported on sight.
+  - name: recovery-scam
+    report_reason: misleading-scam
+    auto_report: true
+    phrases:
+      - "recover your lost crypto"
+      - "recover stolen funds"
+      - "hacked account recovery"
+
+  # Wallet addresses aren't abusive on their own, so this uses "other" and
+  # sits below the scam rules: a giveaway post that includes an address gets
+  # reported as a scam, not other.
+  - name: wallet-address
+    report_reason: other
+    patterns:
+      - '\b0x[a-fA-F0-9]{40}\b'           # EVM (Ethereum, Base, ...)
+      - '\bbc1[ac-hj-np-z02-9]{25,59}\b'  # Bitcoin bech32
+
+  # --- Impersonation (mostly profiles) ----------------------------------------
+
+  - name: staff-impersonation
+    report_reason: misleading-impersonation
+    phrases:
+      - "bluesky support"
+      - "bsky support"
+      - "bluesky moderation team"
+      - "official bluesky"
+    patterns:
+      - '(?i)\b(bsky|bluesky)\s*(team|staff|admin|safety)\b'
+
+  # --- Spam ------------------------------------------------------------------
+
+  - name: dm-solicitation
+    report_reason: misleading-spam
+    phrases:
+      - "dm me for promo"
+      - "dm for collab"
+      - "promote your music"
+      - "boost your followers"
+    patterns:
+      - '(?i)\b(buy|get)\s+\d+k?\s+(real\s+)?followers\b'
+
+  # Link shorteners hide the destination. Expect false positives; this one
+  # is likely to be noisy, so drop it if it floods the Discord channel.
+  - name: suspicious-shortlink
+    report_reason: other
+    patterns:
+      - '(?i)\b(bit\.ly|tinyurl\.com|cutt\.ly|rb\.gy|is\.gd)/\w+'
