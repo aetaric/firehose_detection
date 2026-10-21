@@ -22,7 +22,8 @@ You need Go 1.27 or newer.
 ```
 go build -o firehose-detection .
 cp env.example .env
-$EDITOR .env
+cp rules.example.yaml rules.yaml
+$EDITOR .env rules.yaml
 set -a; . ./.env; set +a
 ./firehose-detection -rules rules.yaml -cursor state.cursor
 ```
@@ -62,7 +63,7 @@ rules:
 Some advice on patterns:
 * Use `[ \t]*` instead of `\s*` when you mean "some spaces". Profile fields and post lines are joined with newlines, and `\s` will happily match across them.
 * If you're writing a "digits with junk between them" pattern, exclude Unicode letters with `\pL`, not just `A-Za-z`. Otherwise every Japanese post with two numbers in it is junk.
-* Add real false positives you've seen to `rules_test.go` as negative cases. `go test ./...` runs the live rules file against them.
+* Keep the real false positives you've seen as negative test cases somewhere, even if that somewhere is not this repo. `rules.yaml` is gitignored on purpose: the real rules are not published because they tell people exactly what to avoid. Tests in this repo only run against `rules.example.yaml`.
 
 ## Output
 Each line on stdout is one detection:
@@ -81,4 +82,4 @@ go build -buildvcs=false -o firehose-detection .
 go vet ./... && go test ./...
 ```
 
-If you change anything in `rules.go` or add a YAML field, rebuild and restart. SIGHUP only reloads the file. The old binary will parse the new file, ignore the fields it doesn't know about, and quietly do the wrong thing. Ask me how I know.
+If you change anything in `rules.go` or add a YAML field, rebuild and restart. SIGHUP only reloads the file. The old binary will parse the new file, ignore the fields it doesn't know about, and quietly do the wrong thing.
