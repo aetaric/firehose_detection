@@ -36,6 +36,9 @@ type RuleConfig struct {
 	// pattern match lying entirely inside one doesn't count, so "category
 	// cat" still fires on "cat".
 	Exclude []string `yaml:"exclude"`
+	// ExcludeAccounts are DIDs whose records this rule never fires on.
+	// Handles aren't accepted: they change, and the firehose only has DIDs.
+	ExcludeAccounts []string `yaml:"exclude_accounts"`
 }
 
 type RulesFile struct {
@@ -54,6 +57,8 @@ type compiledRule struct {
 	langs []string
 	// exclude matches any of the rule's exclude strings, or is nil.
 	exclude *regexp.Regexp
+	// excludeDIDs is nil when no accounts are excluded.
+	excludeDIDs map[string]bool
 }
 
 // Matcher evaluates text against a set of compiled rules. It is safe for
@@ -124,6 +129,16 @@ func NewMatcher(cfgs []RuleConfig) (*Matcher, error) {
 			}
 			cr.langs = append(cr.langs, l)
 		}
+		for _, d := range rc.ExcludeAccounts {
+			d = strings.TrimSpace(d)
+			if !strings.HasPrefix(d, "did:plc:") && !strings.HasPrefix(d, "did:web:") {
+				return nil, fmt.Errorf("rule %q: exclude_accounts entry %q is not a did:plc: or did:web: DID", rc.Name, d)
+			}
+			if cr.excludeDIDs == nil {
+				cr.excludeDIDs = map[string]bool{}
+			}
+			cr.excludeDIDs[d] = true
+		}
 		var excl []string
 		for _, e := range rc.Exclude {
 			if e = strings.TrimSpace(e); e != "" {
@@ -177,10 +192,10 @@ func (m *Matcher) Len() int { return len(m.rules) }
 // HasAutoReport reports whether any rule is configured with auto_report.
 func (m *Matcher) HasAutoReport() bool { return m.auto }
 
-// Match returns every rule that fires on text from a record in collection
-// that declares langs, or nil if none do. Rules scoped to other collections
-// or languages are skipped.
-func (m *Matcher) Match(collection string, langs []string, text string) []RuleHit {
+// Match returns every rule that fires on text from a record by did in
+// collection that declares langs, or nil if none do. Rules scoped to other
+// collections or languages, or excluding did, are skipped.
+func (m *Matcher) Match(did, collection string, langs []string, text string) []RuleHit {
 	if text == "" {
 		return nil
 	}
@@ -191,6 +206,9 @@ func (m *Matcher) Match(collection string, langs []string, text string) []RuleHi
 			continue
 		}
 		if r.langs != nil && !langMatch(r.langs, langs) {
+			continue
+		}
+		if r.excludeDIDs[did] {
 			continue
 		}
 		// Matches entirely inside an excluded span don't count. Spans are

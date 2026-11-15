@@ -15,7 +15,7 @@ func TestMatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits := m.Match("app.bsky.feed.post", nil, "get FREE MONEY now at 0x52908400098527886E0F7030069857D2E4169EE7")
+	hits := m.Match("did:plc:test", "app.bsky.feed.post", nil, "get FREE MONEY now at 0x52908400098527886E0F7030069857D2E4169EE7")
 	if len(hits) != 2 {
 		t.Fatalf("want 2 hits, got %+v", hits)
 	}
@@ -26,7 +26,7 @@ func TestMatcher(t *testing.T) {
 		t.Errorf("regex hit wrong: %+v", hits[1])
 	}
 
-	if hits := m.Match("app.bsky.feed.post", nil, "nothing to see here"); hits != nil {
+	if hits := m.Match("did:plc:test", "app.bsky.feed.post", nil, "nothing to see here"); hits != nil {
 		t.Errorf("want no hits, got %+v", hits)
 	}
 }
@@ -97,7 +97,7 @@ func TestLoadExampleRules(t *testing.T) {
 		"just a normal post about my cat":                     "",
 	}
 	for text, want := range cases {
-		hits := m.Match("app.bsky.feed.post", nil, text)
+		hits := m.Match("did:plc:test", "app.bsky.feed.post", nil, text)
 		got := ""
 		if len(hits) > 0 {
 			got = hits[0].Rule
@@ -113,7 +113,7 @@ func TestReportReasonDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h := m.Match("app.bsky.feed.post", nil, "x"); h[0].Reason != "spam" {
+	if h := m.Match("did:plc:test", "app.bsky.feed.post", nil, "x"); h[0].Reason != "spam" {
 		t.Errorf("default reason = %q", h[0].Reason)
 	}
 	if _, err := NewMatcher([]RuleConfig{{Name: "a", Phrases: []string{"x"}, ReportReason: "nope"}}); err == nil {
@@ -129,7 +129,7 @@ func TestAutoReportPropagatesToHits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hits := m.Match("app.bsky.feed.post", nil, "x y")
+	hits := m.Match("did:plc:test", "app.bsky.feed.post", nil, "x y")
 	if len(hits) != 2 || hits[0].AutoReport || !hits[1].AutoReport {
 		t.Fatalf("auto_report not carried into hits: %+v", hits)
 	}
@@ -161,11 +161,11 @@ func TestMatcherCollectionScope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits := m.Match("app.bsky.actor.profile", nil, "foo")
+	hits := m.Match("did:plc:test", "app.bsky.actor.profile", nil, "foo")
 	if len(hits) != 2 {
 		t.Fatalf("profile: want 2 hits, got %+v", hits)
 	}
-	hits = m.Match("app.bsky.feed.post", nil, "foo")
+	hits = m.Match("did:plc:test", "app.bsky.feed.post", nil, "foo")
 	if len(hits) != 1 || hits[0].Rule != "everywhere" {
 		t.Fatalf("post: want only the unscoped rule, got %+v", hits)
 	}
@@ -200,7 +200,7 @@ func TestMatcherLangScope(t *testing.T) {
 		{[]string{"ptx"}, 1}, // not a subtag of pt
 		{nil, 1},             // undeclared, e.g. every profile
 	} {
-		if hits := m.Match("app.bsky.feed.post", tc.langs, "foo"); len(hits) != tc.want {
+		if hits := m.Match("did:plc:test", "app.bsky.feed.post", tc.langs, "foo"); len(hits) != tc.want {
 			t.Errorf("langs %v: want %d hits, got %+v", tc.langs, tc.want, hits)
 		}
 	}
@@ -224,16 +224,16 @@ func TestMatcherExclude(t *testing.T) {
 	}
 
 	for _, text := range []string{"Category", "CATEGORY tips", "categorical"} {
-		if hits := m.Match("app.bsky.feed.post", nil, text); hits != nil {
+		if hits := m.Match("did:plc:test", "app.bsky.feed.post", nil, text); hits != nil {
 			t.Errorf("%q: excluded text should not fire, got %+v", text, hits)
 		}
 	}
 	// Excluding one span must not hide a real match elsewhere in the text.
-	if hits := m.Match("app.bsky.feed.post", nil, "category cat"); len(hits) != 1 {
+	if hits := m.Match("did:plc:test", "app.bsky.feed.post", nil, "category cat"); len(hits) != 1 {
 		t.Errorf("want a hit on the unexcluded cat, got %+v", hits)
 	}
 	// A match that runs past the excluded span still counts.
-	if hits := m.Match("app.bsky.feed.post", nil, "categorycat"); len(hits) != 1 || hits[0].Matches[0] != "categorycat" {
+	if hits := m.Match("did:plc:test", "app.bsky.feed.post", nil, "categorycat"); len(hits) != 1 || hits[0].Matches[0] != "categorycat" {
 		t.Errorf("want a pattern hit on categorycat, got %+v", hits)
 	}
 }
@@ -247,7 +247,7 @@ func TestMatcherExcludeKeepsContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hits := m.Match("app.bsky.feed.post", nil, "categoryfoo"); hits != nil {
+	if hits := m.Match("did:plc:test", "app.bsky.feed.post", nil, "categoryfoo"); hits != nil {
 		t.Errorf("exclusion created a match: %+v", hits)
 	}
 }
@@ -268,5 +268,30 @@ func TestWithin(t *testing.T) {
 	}
 	if within(nil, 0, 1) {
 		t.Error("nil spans should hold nothing")
+	}
+}
+
+func TestMatcherExcludeAccounts(t *testing.T) {
+	m, err := NewMatcher([]RuleConfig{
+		{Name: "any", Phrases: []string{"foo"}},
+		{Name: "not bob", Phrases: []string{"foo"}, ExcludeAccounts: []string{" did:plc:bob "}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hits := m.Match("did:plc:bob", "app.bsky.feed.post", nil, "foo"); len(hits) != 1 || hits[0].Rule != "any" {
+		t.Errorf("excluded account: want only the other rule, got %+v", hits)
+	}
+	if hits := m.Match("did:plc:alice", "app.bsky.feed.post", nil, "foo"); len(hits) != 2 {
+		t.Errorf("other account: want 2 hits, got %+v", hits)
+	}
+}
+
+func TestNewMatcherRejectsHandleInExcludeAccounts(t *testing.T) {
+	_, err := NewMatcher([]RuleConfig{
+		{Name: "a", Phrases: []string{"x"}, ExcludeAccounts: []string{"bob.bsky.social"}},
+	})
+	if err == nil {
+		t.Fatal("expected error for a handle in exclude_accounts")
 	}
 }

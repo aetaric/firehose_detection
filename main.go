@@ -123,7 +123,7 @@ func run(log *slog.Logger, host, rulesPath, cursorPath string) error {
 			}
 			seen++
 			text := extract(c.Record)
-			hits := m.Match(c.Collection, recordLangs(c.Record), text)
+			hits := m.Match(evt.DID, c.Collection, recordLangs(c.Record), text)
 			if len(hits) == 0 {
 				continue
 			}

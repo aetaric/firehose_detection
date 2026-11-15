@@ -29,6 +29,13 @@
 #                  or running past the excluded text still fire, so "category
 #                  cat" does; adding the excluded word to a post is not a
 #                  way around the rule.
+#   exclude_accounts: optional list of account DIDs (did:plc:... or
+#                  did:web:...) this rule never fires on. Handles are rejected:
+#                  they can change hands, and the firehose only carries DIDs.
+#                  Look one up with
+#                  https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=HANDLE
+#                  It only skips this rule; list the account on each rule
+#                  that misfires for it.
 #   auto_report:   true files the Bluesky report immediately, with no human
 #                  in the loop, every time the rule fires (default false).
 #                  Reserve it for rules with no false positives. Needs
