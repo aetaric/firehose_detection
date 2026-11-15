@@ -3,3 +3,5 @@
 .env
 rules.yaml
 detections.jsonl
+tools/venv/
+__pycache__/

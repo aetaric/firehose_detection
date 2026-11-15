@@ -88,3 +88,14 @@ go vet ./... && go test ./...
 ```
 
 If you change anything in `rules.go` or add a YAML field, rebuild and restart. SIGHUP only reloads the file. The old binary will parse the new file, ignore the fields it doesn't know about, and quietly do the wrong thing.
+
+## Experimenting with classifiers
+`tools/spamton_check.py` scores a post or profile with the [tiagozip/spamton](https://huggingface.co/tiagozip/spamton) spam classifier, pulling the same text fields the rules engine scans (and, like the rules engine, never touching media). It is a standalone Python script and is not used by the Go binary.
+
+```
+uv run tools/spamton_check.py https://bsky.app/profile/someone.bsky.social/post/3kabc
+uv run tools/spamton_check.py at://did:plc:.../app.bsky.actor.profile/self --show-text
+uv run tools/spamton_check.py --text "WINNER!! Claim your prize now"
+```
+
+Without `uv`, `pip install torch transformers requests` and run it with `python`. It uses a GPU if your torch build can see one and falls back to CPU, which is fast enough for this model.
