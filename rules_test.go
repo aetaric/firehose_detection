@@ -251,3 +251,22 @@ func TestMatcherExcludeKeepsContext(t *testing.T) {
 		t.Errorf("exclusion created a match: %+v", hits)
 	}
 }
+
+func TestWithin(t *testing.T) {
+	spans := [][]int{{2, 5}, {8, 10}, {10, 14}}
+	for _, tc := range []struct {
+		start, end int
+		want       bool
+	}{
+		{2, 5, true}, {3, 4, true}, {1, 3, false}, {4, 6, false},
+		{5, 6, false}, {8, 10, true}, {10, 12, true}, {9, 11, false},
+		{14, 15, false}, {0, 1, false},
+	} {
+		if got := within(spans, tc.start, tc.end); got != tc.want {
+			t.Errorf("within(%d, %d) = %v, want %v", tc.start, tc.end, got, tc.want)
+		}
+	}
+	if within(nil, 0, 1) {
+		t.Error("nil spans should hold nothing")
+	}
+}

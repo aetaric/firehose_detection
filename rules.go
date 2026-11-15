@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"regexp"
@@ -232,11 +233,13 @@ func (m *Matcher) Match(collection string, langs []string, text string) []RuleHi
 }
 
 // within reports whether [start, end) lies entirely inside one of spans.
+// spans must be sorted and non-overlapping, as FindAllStringIndex returns
+// them; a binary search keeps text that repeats an excluded word thousands
+// of times from making each check linear.
 func within(spans [][]int, start, end int) bool {
-	for _, sp := range spans {
-		if start >= sp[0] && end <= sp[1] {
-			return true
-		}
-	}
-	return false
+	// The first span ending after start is the only one that can hold it.
+	i, _ := slices.BinarySearchFunc(spans, start, func(sp []int, t int) int {
+		return cmp.Compare(sp[1], t+1)
+	})
+	return i < len(spans) && spans[i][0] <= start && end <= spans[i][1]
 }
