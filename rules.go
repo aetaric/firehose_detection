@@ -31,9 +31,9 @@ type RuleConfig struct {
 	// Records that declare no language (all profiles, some posts) never match
 	// a rule with langs set.
 	Langs []string `yaml:"langs"`
-	// Exclude are literal strings, matched case-insensitively, that are
-	// blanked out of the text before this rule's phrases and patterns run.
-	// They only remove their own span: "category cat" still fires on "cat".
+	// Exclude are literal strings, matched case-insensitively. A phrase or
+	// pattern match lying entirely inside one doesn't count, so "category
+	// cat" still fires on "cat".
 	Exclude []string `yaml:"exclude"`
 }
 
@@ -192,22 +192,33 @@ func (m *Matcher) Match(collection string, langs []string, text string) []RuleHi
 		if r.langs != nil && !langMatch(r.langs, langs) {
 			continue
 		}
-		text, lower := text, lower
+		// Matches entirely inside an excluded span don't count. Spans are
+		// found in both text and lower since lowercasing can shift offsets.
+		var exText, exLower [][]int
 		if r.exclude != nil {
-			// NUL is neither a letter nor whitespace, so it can't complete a
-			// phrase or join the text on either side of the excluded span.
-			text = r.exclude.ReplaceAllLiteralString(text, "\x00")
-			lower = strings.ToLower(text)
+			exText = r.exclude.FindAllStringIndex(text, -1)
+			exLower = r.exclude.FindAllStringIndex(lower, -1)
 		}
 		var h RuleHit
 		for _, p := range r.phrases {
-			if strings.Contains(lower, p) {
-				h.Phrases = append(h.Phrases, p)
+			for i := 0; ; {
+				j := strings.Index(lower[i:], p)
+				if j < 0 {
+					break
+				}
+				if i += j; !within(exLower, i, i+len(p)) {
+					h.Phrases = append(h.Phrases, p)
+					break
+				}
+				i++
 			}
 		}
 		for _, re := range r.patterns {
-			if s := re.FindString(text); s != "" {
-				h.Matches = append(h.Matches, s)
+			for _, loc := range re.FindAllStringIndex(text, -1) {
+				if loc[1] > loc[0] && !within(exText, loc[0], loc[1]) {
+					h.Matches = append(h.Matches, text[loc[0]:loc[1]])
+					break
+				}
 			}
 		}
 		if len(h.Phrases) > 0 || len(h.Matches) > 0 {
@@ -218,4 +229,14 @@ func (m *Matcher) Match(collection string, langs []string, text string) []RuleHi
 		}
 	}
 	return hits
+}
+
+// within reports whether [start, end) lies entirely inside one of spans.
+func within(spans [][]int, start, end int) bool {
+	for _, sp := range spans {
+		if start >= sp[0] && end <= sp[1] {
+			return true
+		}
+	}
+	return false
 }

@@ -180,7 +180,6 @@ func TestNewMatcherRejectsUnknownCollection(t *testing.T) {
 	}
 }
 
-
 func TestMatcherLangScope(t *testing.T) {
 	m, err := NewMatcher([]RuleConfig{
 		{Name: "any", Phrases: []string{"foo"}},
@@ -232,5 +231,23 @@ func TestMatcherExclude(t *testing.T) {
 	// Excluding one span must not hide a real match elsewhere in the text.
 	if hits := m.Match("app.bsky.feed.post", nil, "category cat"); len(hits) != 1 {
 		t.Errorf("want a hit on the unexcluded cat, got %+v", hits)
+	}
+	// A match that runs past the excluded span still counts.
+	if hits := m.Match("app.bsky.feed.post", nil, "categorycat"); len(hits) != 1 || hits[0].Matches[0] != "categorycat" {
+		t.Errorf("want a pattern hit on categorycat, got %+v", hits)
+	}
+}
+
+func TestMatcherExcludeKeepsContext(t *testing.T) {
+	// Exclusions must not change the text other matches see: the letter
+	// before "foo" is still there, so this pattern must not fire.
+	m, err := NewMatcher([]RuleConfig{
+		{Name: "a", Patterns: []string{`(?:^|[^\pL])foo`}, Exclude: []string{"category"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hits := m.Match("app.bsky.feed.post", nil, "categoryfoo"); hits != nil {
+		t.Errorf("exclusion created a match: %+v", hits)
 	}
 }
