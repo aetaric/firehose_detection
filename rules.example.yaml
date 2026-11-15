@@ -15,6 +15,13 @@
 #                  app.bsky.feed.post, app.bsky.actor.profile. Default: all.
 #                  Use it when a pattern means something different in a bio
 #                  than in a post.
+#   langs:         optional list of BCP-47 language tags (ja, pt, zh-Hant).
+#                  The rule only runs on posts that declare one of them; "pt"
+#                  also covers "pt-BR". Records with no declared language,
+#                  which includes every profile, are skipped. The language is
+#                  whatever the posting client set, so it can be missing or
+#                  wrong. Use it for terms that are innocent in other
+#                  languages, not as the thing that makes a rule safe.
 #   auto_report:   true files the Bluesky report immediately, with no human
 #                  in the loop, every time the rule fires (default false).
 #                  Reserve it for rules with no false positives. Needs

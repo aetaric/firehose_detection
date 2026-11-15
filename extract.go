@@ -13,6 +13,20 @@ var extractors = map[string]func(map[string]any) string{
 	"app.bsky.actor.profile": profileText,
 }
 
+// recordLangs returns the language tags a record declares. Only posts have
+// them, and they are set by the posting client, so they may be missing or
+// wrong.
+func recordLangs(rec map[string]any) []string {
+	raw, _ := rec["langs"].([]any)
+	var langs []string
+	for _, v := range raw {
+		if s, ok := v.(string); ok && s != "" {
+			langs = append(langs, s)
+		}
+	}
+	return langs
+}
+
 // profileText pulls the matchable text out of an app.bsky.actor.profile
 // record: display name, bio, pronouns, and website.
 func profileText(rec map[string]any) string {

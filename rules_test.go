@@ -15,7 +15,7 @@ func TestMatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits := m.Match("app.bsky.feed.post", "get FREE MONEY now at 0x52908400098527886E0F7030069857D2E4169EE7")
+	hits := m.Match("app.bsky.feed.post", nil, "get FREE MONEY now at 0x52908400098527886E0F7030069857D2E4169EE7")
 	if len(hits) != 2 {
 		t.Fatalf("want 2 hits, got %+v", hits)
 	}
@@ -26,7 +26,7 @@ func TestMatcher(t *testing.T) {
 		t.Errorf("regex hit wrong: %+v", hits[1])
 	}
 
-	if hits := m.Match("app.bsky.feed.post", "nothing to see here"); hits != nil {
+	if hits := m.Match("app.bsky.feed.post", nil, "nothing to see here"); hits != nil {
 		t.Errorf("want no hits, got %+v", hits)
 	}
 }
@@ -97,7 +97,7 @@ func TestLoadExampleRules(t *testing.T) {
 		"just a normal post about my cat":                     "",
 	}
 	for text, want := range cases {
-		hits := m.Match("app.bsky.feed.post", text)
+		hits := m.Match("app.bsky.feed.post", nil, text)
 		got := ""
 		if len(hits) > 0 {
 			got = hits[0].Rule
@@ -113,7 +113,7 @@ func TestReportReasonDefaultsAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h := m.Match("app.bsky.feed.post", "x"); h[0].Reason != "spam" {
+	if h := m.Match("app.bsky.feed.post", nil, "x"); h[0].Reason != "spam" {
 		t.Errorf("default reason = %q", h[0].Reason)
 	}
 	if _, err := NewMatcher([]RuleConfig{{Name: "a", Phrases: []string{"x"}, ReportReason: "nope"}}); err == nil {
@@ -129,7 +129,7 @@ func TestAutoReportPropagatesToHits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hits := m.Match("app.bsky.feed.post", "x y")
+	hits := m.Match("app.bsky.feed.post", nil, "x y")
 	if len(hits) != 2 || hits[0].AutoReport || !hits[1].AutoReport {
 		t.Fatalf("auto_report not carried into hits: %+v", hits)
 	}
@@ -161,11 +161,11 @@ func TestMatcherCollectionScope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits := m.Match("app.bsky.actor.profile", "foo")
+	hits := m.Match("app.bsky.actor.profile", nil, "foo")
 	if len(hits) != 2 {
 		t.Fatalf("profile: want 2 hits, got %+v", hits)
 	}
-	hits = m.Match("app.bsky.feed.post", "foo")
+	hits = m.Match("app.bsky.feed.post", nil, "foo")
 	if len(hits) != 1 || hits[0].Rule != "everywhere" {
 		t.Fatalf("post: want only the unscoped rule, got %+v", hits)
 	}
@@ -180,3 +180,38 @@ func TestNewMatcherRejectsUnknownCollection(t *testing.T) {
 	}
 }
 
+
+func TestMatcherLangScope(t *testing.T) {
+	m, err := NewMatcher([]RuleConfig{
+		{Name: "any", Phrases: []string{"foo"}},
+		{Name: "pt or ja", Phrases: []string{"foo"}, Langs: []string{"PT", "ja"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		langs []string
+		want  int
+	}{
+		{[]string{"pt"}, 2},
+		{[]string{"pt-BR"}, 2},
+		{[]string{"en", "ja"}, 2},
+		{[]string{"en"}, 1},
+		{[]string{"ptx"}, 1}, // not a subtag of pt
+		{nil, 1},             // undeclared, e.g. every profile
+	} {
+		if hits := m.Match("app.bsky.feed.post", tc.langs, "foo"); len(hits) != tc.want {
+			t.Errorf("langs %v: want %d hits, got %+v", tc.langs, tc.want, hits)
+		}
+	}
+}
+
+func TestNewMatcherRejectsInvalidLang(t *testing.T) {
+	_, err := NewMatcher([]RuleConfig{
+		{Name: "a", Phrases: []string{"x"}, Langs: []string{"pt_BR"}},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid language tag")
+	}
+}

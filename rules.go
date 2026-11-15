@@ -25,6 +25,11 @@ type RuleConfig struct {
 	// Collections restricts the rule to these record NSIDs (keys of
 	// extractors in extract.go). Empty means every collection.
 	Collections []string `yaml:"collections"`
+	// Langs restricts the rule to records that declare one of these BCP-47
+	// language tags. "pt" also matches "pt-BR". Empty means any language.
+	// Records that declare no language (all profiles, some posts) never match
+	// a rule with langs set.
+	Langs []string `yaml:"langs"`
 }
 
 type RulesFile struct {
@@ -39,6 +44,8 @@ type compiledRule struct {
 	patterns []*regexp.Regexp
 	// collections is nil for an unscoped rule.
 	collections map[string]bool
+	// langs is nil for a rule that runs on every language. Lowercased.
+	langs []string
 }
 
 // Matcher evaluates text against a set of compiled rules. It is safe for
@@ -102,6 +109,13 @@ func NewMatcher(cfgs []RuleConfig) (*Matcher, error) {
 			}
 			cr.collections[c] = true
 		}
+		for _, l := range rc.Langs {
+			l = strings.ToLower(strings.TrimSpace(l))
+			if !langTag.MatchString(l) {
+				return nil, fmt.Errorf("rule %q: invalid language tag %q", rc.Name, l)
+			}
+			cr.langs = append(cr.langs, l)
+		}
 		for _, p := range rc.Phrases {
 			if p = strings.TrimSpace(p); p != "" {
 				cr.phrases = append(cr.phrases, strings.ToLower(p))
@@ -119,14 +133,32 @@ func NewMatcher(cfgs []RuleConfig) (*Matcher, error) {
 	return m, nil
 }
 
+// langTag is a loose BCP-47 check: alphanumeric subtags joined by hyphens.
+var langTag = regexp.MustCompile(`^[a-z]{1,8}(-[a-z0-9]{1,8})*$`)
+
+// langMatch reports whether any declared tag is one of want or a subtag of
+// one ("pt-br" is a "pt"). want is lowercased.
+func langMatch(want, declared []string) bool {
+	for _, d := range declared {
+		d = strings.ToLower(d)
+		for _, w := range want {
+			if d == w || strings.HasPrefix(d, w+"-") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (m *Matcher) Len() int { return len(m.rules) }
 
 // HasAutoReport reports whether any rule is configured with auto_report.
 func (m *Matcher) HasAutoReport() bool { return m.auto }
 
-// Match returns every rule that fires on text from a record in collection,
-// or nil if none do. Rules scoped to other collections are skipped.
-func (m *Matcher) Match(collection, text string) []RuleHit {
+// Match returns every rule that fires on text from a record in collection
+// that declares langs, or nil if none do. Rules scoped to other collections
+// or languages are skipped.
+func (m *Matcher) Match(collection string, langs []string, text string) []RuleHit {
 	if text == "" {
 		return nil
 	}
@@ -134,6 +166,9 @@ func (m *Matcher) Match(collection, text string) []RuleHit {
 	var hits []RuleHit
 	for _, r := range m.rules {
 		if r.collections != nil && !r.collections[collection] {
+			continue
+		}
+		if r.langs != nil && !langMatch(r.langs, langs) {
 			continue
 		}
 		var h RuleHit
