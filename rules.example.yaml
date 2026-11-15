@@ -22,6 +22,12 @@
 #                  whatever the posting client set, so it can be missing or
 #                  wrong. Use it for terms that are innocent in other
 #                  languages, not as the thing that makes a rule safe.
+#   exclude:       optional list of literal strings, case-insensitive, cut out
+#                  of the text before this rule's phrases and patterns run.
+#                  Use it for known false positives, e.g. a phrase "cat"
+#                  with exclude: ['category']. It only removes its own span,
+#                  so "category cat" still fires; adding the excluded word to
+#                  a post is not a way around the rule.
 #   auto_report:   true files the Bluesky report immediately, with no human
 #                  in the loop, every time the rule fires (default false).
 #                  Reserve it for rules with no false positives. Needs

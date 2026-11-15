@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -30,6 +31,10 @@ type RuleConfig struct {
 	// Records that declare no language (all profiles, some posts) never match
 	// a rule with langs set.
 	Langs []string `yaml:"langs"`
+	// Exclude are literal strings, matched case-insensitively, that are
+	// blanked out of the text before this rule's phrases and patterns run.
+	// They only remove their own span: "category cat" still fires on "cat".
+	Exclude []string `yaml:"exclude"`
 }
 
 type RulesFile struct {
@@ -46,6 +51,8 @@ type compiledRule struct {
 	collections map[string]bool
 	// langs is nil for a rule that runs on every language. Lowercased.
 	langs []string
+	// exclude matches any of the rule's exclude strings, or is nil.
+	exclude *regexp.Regexp
 }
 
 // Matcher evaluates text against a set of compiled rules. It is safe for
@@ -116,6 +123,20 @@ func NewMatcher(cfgs []RuleConfig) (*Matcher, error) {
 			}
 			cr.langs = append(cr.langs, l)
 		}
+		var excl []string
+		for _, e := range rc.Exclude {
+			if e = strings.TrimSpace(e); e != "" {
+				excl = append(excl, e)
+			}
+		}
+		if excl != nil {
+			// Longest first, so the longest exclusion wins where they overlap.
+			slices.SortFunc(excl, func(a, b string) int { return len(b) - len(a) })
+			for i, e := range excl {
+				excl[i] = regexp.QuoteMeta(e)
+			}
+			cr.exclude = regexp.MustCompile("(?i)" + strings.Join(excl, "|"))
+		}
 		for _, p := range rc.Phrases {
 			if p = strings.TrimSpace(p); p != "" {
 				cr.phrases = append(cr.phrases, strings.ToLower(p))
@@ -170,6 +191,13 @@ func (m *Matcher) Match(collection string, langs []string, text string) []RuleHi
 		}
 		if r.langs != nil && !langMatch(r.langs, langs) {
 			continue
+		}
+		text, lower := text, lower
+		if r.exclude != nil {
+			// NUL is neither a letter nor whitespace, so it can't complete a
+			// phrase or join the text on either side of the excluded span.
+			text = r.exclude.ReplaceAllLiteralString(text, "\x00")
+			lower = strings.ToLower(text)
 		}
 		var h RuleHit
 		for _, p := range r.phrases {

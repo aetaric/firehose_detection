@@ -215,3 +215,22 @@ func TestNewMatcherRejectsInvalidLang(t *testing.T) {
 		t.Fatal("expected error for invalid language tag")
 	}
 }
+
+func TestMatcherExclude(t *testing.T) {
+	m, err := NewMatcher([]RuleConfig{
+		{Name: "a", Phrases: []string{"cat"}, Patterns: []string{`cat\w*`}, Exclude: []string{"Category", "categorical"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, text := range []string{"Category", "CATEGORY tips", "categorical"} {
+		if hits := m.Match("app.bsky.feed.post", nil, text); hits != nil {
+			t.Errorf("%q: excluded text should not fire, got %+v", text, hits)
+		}
+	}
+	// Excluding one span must not hide a real match elsewhere in the text.
+	if hits := m.Match("app.bsky.feed.post", nil, "category cat"); len(hits) != 1 {
+		t.Errorf("want a hit on the unexcluded cat, got %+v", hits)
+	}
+}
