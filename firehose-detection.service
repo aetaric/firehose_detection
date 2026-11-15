@@ -1,0 +1,32 @@
+# systemd user unit. Assumes the repo is checked out at ~/src/firehose-detection
+# with the binary, .env and rules.yaml built/created there (see "Running it").
+# Edit WorkingDirectory if yours lives somewhere else.
+#
+#   systemctl --user link ~/src/firehose-detection/firehose-detection.service
+#   systemctl --user enable --now firehose-detection
+#   systemctl --user reload firehose-detection   # SIGHUP: reload rules.yaml
+#   journalctl --user -u firehose-detection -f
+#
+# User services stop when you log out unless lingering is on:
+#   loginctl enable-linger
+
+[Unit]
+Description=Bluesky firehose rule matcher
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/src/firehose-detection
+EnvironmentFile=%h/src/firehose-detection/.env
+ExecStart=%h/src/firehose-detection/firehose-detection -rules rules.yaml -cursor state.cursor
+ExecReload=/bin/kill -HUP $MAINPID
+# Detections (JSONL) go to a file so the lossless record survives journal
+# rotation; logs and counters go to stderr and end up in the journal.
+StandardOutput=append:%h/src/firehose-detection/detections.jsonl
+StandardError=journal
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -33,6 +33,8 @@ Flags:
 * `-cursor` file to persist the Jetstream cursor in. With it, a restart picks up where it left off (at-least-once, so you may see a duplicate or two after a crash). Without it, you start at the live tip and miss whatever happened while you were down.
 * `-host` Jetstream host. Default `jetstream.us-west.bsky.network`.
 
+To keep it running, `firehose-detection.service` is a systemd user unit that does the above from `~/src/firehose-detection` (edit the paths if yours is elsewhere). It reads `.env` directly, appends detections to `detections.jsonl`, logs to the journal, restarts on failure, and maps `systemctl --user reload` to SIGHUP. Install instructions are at the top of the file. Run `loginctl enable-linger` once if you want it running while you're logged out.
+
 Secrets come from the environment, not flags, so they stay out of `ps`. `env.example` walks through creating the Discord bot and the Bluesky app password step by step, including the permission bits and the "This interaction failed" gotcha. Read it.
 
 What you get with each piece configured:

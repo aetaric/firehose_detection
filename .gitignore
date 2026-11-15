@@ -2,3 +2,4 @@
 *.cursor
 .env
 rules.yaml
+detections.jsonl
